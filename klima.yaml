@@ -25,6 +25,7 @@ blueprint:
       selector:
         entity:
           domain: climate
+          multiple: true   # <- tu dodałem, żeby można było wybrać kilka
 
     temp_target_cool:
       name: Temperatura dla chłodzenia (°C)
