@@ -1,9 +1,10 @@
 blueprint:
-  name: "Kontrola Midea AC LAN — temperatura + wilgotność"
+  name: "Kontrola Midea AC LAN na podstawie temperatury i wilgotności"
   description: >
-    Automatyczne sterowanie klimatyzatorem Midea (midea_ac_lan)
-    na podstawie temperatury i wilgotności.
+    Steruje klimatyzatorem Midea AC LAN w zależności od temperatury i wilgotności:
+    chłodzi, grzeje, osusza lub przełącza na AUTO.
   domain: automation
+
   input:
     sensor_temperature:
       name: Czujnik temperatury
@@ -19,10 +20,9 @@ blueprint:
         entity:
           domain: sensor
           device_class: humidity
-          multiple: false
 
     climate_device:
-      name: Urządzenie klimatyzacyjne
+      name: Klimatyzator (Midea AC LAN)
       selector:
         entity:
           domain: climate
@@ -33,7 +33,6 @@ blueprint:
         number:
           min: 16
           max: 30
-          unit_of_measurement: "°C"
 
     temp_target_heat:
       name: Temperatura dla grzania (°C)
@@ -41,16 +40,14 @@ blueprint:
         number:
           min: 10
           max: 25
-          unit_of_measurement: "°C"
 
     humidity_max:
-      name: Maksymalna wilgotność (%) — tryb dry
+      name: Maksymalna wilgotność (%)
       default: 70
       selector:
         number:
           min: 30
           max: 90
-          unit_of_measurement: "%"
 
 trigger:
   - platform: state
@@ -58,33 +55,24 @@ trigger:
 
   - platform: state
     entity_id: !input sensor_humidity
-    # Działa tylko jeśli wybrano s-humidity
-    enabled: "{{ (input.sensor_humidity | string) != '' }}"
 
 action:
-  - variables:
-      temp: "{{ states(input.sensor_temperature) | float(0) }}"
-      hum_entity: "{{ input.sensor_humidity }}"
-      hum: >
-        {% if hum_entity != '' %}
-        {{ states(hum_entity) | float(0) }}
-        {% else %}
-        -1
-        {% endif %}
-
   - choose:
 
-      # --- Wilgotność powyżej limitu ---
+      # 1️⃣ Wilgotność – tylko jeśli czujnik istnieje
       - conditions:
-          - "{{ hum_entity != '' and hum > (input.humidity_max | float) }}"
+          - condition: template
+            value_template: >
+              {{ (inputs.sensor_humidity != '') and
+                 (states(inputs.sensor_humidity) | float > inputs.humidity_max) }}
         sequence:
           - service: climate.set_hvac_mode
             target:
               entity_id: !input climate_device
             data:
-              hvac_mode: "dry"
+              hvac_mode: dry
 
-      # --- Temperatura za wysoka = chłodzenie ---
+      # 2️⃣ Chłodzenie
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -94,14 +82,14 @@ action:
             target:
               entity_id: !input climate_device
             data:
-              hvac_mode: "cool"
+              hvac_mode: cool
           - service: climate.set_temperature
             target:
               entity_id: !input climate_device
             data:
               temperature: !input temp_target_cool
 
-      # --- Temperatura za niska = grzanie ---
+      # 3️⃣ Grzanie
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -111,16 +99,17 @@ action:
             target:
               entity_id: !input climate_device
             data:
-              hvac_mode: "heat"
+              hvac_mode: heat
           - service: climate.set_temperature
             target:
               entity_id: !input climate_device
             data:
               temperature: !input temp_target_heat
 
+  # 4️⃣ Domyślnie AUTO, jeśli nic nie pasuje
     default:
       - service: climate.set_hvac_mode
         target:
           entity_id: !input climate_device
         data:
-          hvac_mode: "auto"
+          hvac_mode: auto
