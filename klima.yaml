@@ -1,8 +1,8 @@
 blueprint:
-  name: "Kontrola Midea AC LAN na podstawie temperatury i wilgotności"
+  name: Kontrola Midea AC LAN – temperatura + wilgotność
   description: >
-    Steruje klimatyzatorem Midea AC LAN w zależności od temperatury i wilgotności:
-    chłodzi, grzeje, osusza lub przełącza na AUTO.
+    Automatyczne przełączanie trybu klimatyzacji Midea (midea_ac_lan)
+    w zależności od temperatury i wilgotności.
   domain: automation
 
   input:
@@ -22,7 +22,7 @@ blueprint:
           device_class: humidity
 
     climate_device:
-      name: Klimatyzator (Midea AC LAN)
+      name: Klimatyzacja Midea
       selector:
         entity:
           domain: climate
@@ -33,6 +33,7 @@ blueprint:
         number:
           min: 16
           max: 30
+          unit_of_measurement: "°C"
 
     temp_target_heat:
       name: Temperatura dla grzania (°C)
@@ -40,6 +41,7 @@ blueprint:
         number:
           min: 10
           max: 25
+          unit_of_measurement: "°C"
 
     humidity_max:
       name: Maksymalna wilgotność (%)
@@ -48,6 +50,7 @@ blueprint:
         number:
           min: 30
           max: 90
+          unit_of_measurement: "%"
 
 trigger:
   - platform: state
@@ -56,15 +59,20 @@ trigger:
   - platform: state
     entity_id: !input sensor_humidity
 
-action:
-  - choose:
+condition: []
 
-      # 1️⃣ Wilgotność – tylko jeśli czujnik istnieje
+action:
+
+  # --- WILGOTNOŚĆ ---
+  - choose:
       - conditions:
-          - condition: template
-            value_template: >
-              {{ (inputs.sensor_humidity != '') and
-                 (states(inputs.sensor_humidity) | float > inputs.humidity_max) }}
+          - condition: and
+            conditions:
+              - condition: template
+                value_template: "{{ (inputs.sensor_humidity | length) > 0 }}"
+              - condition: template
+                value_template: >
+                  {{ states(inputs.sensor_humidity) | float(0) > inputs.humidity_max }}
         sequence:
           - service: climate.set_hvac_mode
             target:
@@ -72,7 +80,7 @@ action:
             data:
               hvac_mode: dry
 
-      # 2️⃣ Chłodzenie
+  # --- CHŁODZENIE ---
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -84,12 +92,12 @@ action:
             data:
               hvac_mode: cool
           - service: climate.set_temperature
-            target:
-              entity_id: !input climate_device
             data:
               temperature: !input temp_target_cool
+            target:
+              entity_id: !input climate_device
 
-      # 3️⃣ Grzanie
+  # --- GRZANIE ---
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -101,12 +109,12 @@ action:
             data:
               hvac_mode: heat
           - service: climate.set_temperature
-            target:
-              entity_id: !input climate_device
             data:
               temperature: !input temp_target_heat
+            target:
+              entity_id: !input climate_device
 
-  # 4️⃣ Domyślnie AUTO, jeśli nic nie pasuje
+  # --- W INNYCH PRZYPADKACH AUTO ---
     default:
       - service: climate.set_hvac_mode
         target:
