@@ -14,8 +14,7 @@ blueprint:
           device_class: temperature
 
     sensor_humidity:
-      name: Czujnik wilgotności (opcjonalnie)
-      default: ""
+      name: Czujnik wilgotności
       selector:
         entity:
           domain: sensor
@@ -62,17 +61,15 @@ trigger:
 condition: []
 
 action:
-
-  # --- WILGOTNOŚĆ ---
   - choose:
+
+      # --- WILGOTNOŚĆ ---
       - conditions:
-          - condition: and
-            conditions:
-              - condition: template
-                value_template: "{{ (inputs.sensor_humidity | length) > 0 }}"
-              - condition: template
-                value_template: >
-                  {{ states(inputs.sensor_humidity) | float(0) > inputs.humidity_max }}
+          - condition: template
+            value_template: >
+              {{ states( !input sensor_humidity ) not in ['unknown', 'unavailable', ''] and
+                 (states( !input sensor_humidity ) | float(0)) >
+                 ( !input humidity_max | float(0) ) }}
         sequence:
           - service: climate.set_hvac_mode
             target:
@@ -80,7 +77,7 @@ action:
             data:
               hvac_mode: dry
 
-  # --- CHŁODZENIE ---
+      # --- CHŁODZENIE ---
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -92,12 +89,12 @@ action:
             data:
               hvac_mode: cool
           - service: climate.set_temperature
-            data:
-              temperature: !input temp_target_cool
             target:
               entity_id: !input climate_device
+            data:
+              temperature: !input temp_target_cool
 
-  # --- GRZANIE ---
+      # --- GRZANIE ---
       - conditions:
           - condition: numeric_state
             entity_id: !input sensor_temperature
@@ -109,12 +106,12 @@ action:
             data:
               hvac_mode: heat
           - service: climate.set_temperature
-            data:
-              temperature: !input temp_target_heat
             target:
               entity_id: !input climate_device
+            data:
+              temperature: !input temp_target_heat
 
-  # --- W INNYCH PRZYPADKACH AUTO ---
+    # --- W INNYCH PRZYPADKACH AUTO ---
     default:
       - service: climate.set_hvac_mode
         target:
