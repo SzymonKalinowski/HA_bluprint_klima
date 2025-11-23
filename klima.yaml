@@ -1,0 +1,105 @@
+blueprint:
+  name: „Kontrola klimatyzatora Midea AC LAN — temperatura + wilgotność”
+  description: >
+    Włącza lub zmienia tryb urządzenia klimatyzacyjnego (poprzez integrację Midea AC LAN)
+    w zależności od temperatury i wilgotności pomieszczenia.
+  domain: automation
+  input:
+    sensor_temperature:
+      name: Czujnik temperatury
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    sensor_humidity:
+      name: Czujnik wilgotności (opcjonalnie)
+      selector:
+        entity:
+          domain: sensor
+          device_class: humidity
+      default: null
+    climate_device:
+      name: Urządzenie klimatyzacyjne
+      selector:
+        entity:
+          domain: climate
+    temp_target_cool:
+      name: Docelowa temperatura dla chłodzenia (°C)
+      selector:
+        number:
+          min: 16
+          max: 30
+          unit_of_measurement: "°C"
+    temp_target_heat:
+      name: Docelowa temperatura dla grzania (°C)
+      selector:
+        number:
+          min: 10
+          max: 25
+          unit_of_measurement: "°C"
+    humidity_max:
+      name: Maksymalna wilgotność (%) — powyżej tej wartości wkroczy tryb „osuszania” lub wentylacji
+      selector:
+        number:
+          min: 30
+          max: 90
+          unit_of_measurement: "%"
+      default: 70
+
+trigger:
+  - platform: state
+    entity_id: !input sensor_temperature
+  - platform: state
+    entity_id: !input sensor_humidity
+      condition: !input sensor_humidity != null
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: numeric_state
+            entity_id: !input sensor_humidity
+            above: !input humidity_max
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_device
+            data:
+              hvac_mode: "dry"   # lub "fan_only" jeśli urządzenie nie ma „dry”
+      - conditions:
+          - condition: numeric_state
+            entity_id: !input sensor_temperature
+            above: !input temp_target_cool
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_device
+            data:
+              hvac_mode: "cool"
+          - service: climate.set_temperature
+            target:
+              entity_id: !input climate_device
+            data:
+              temperature: !input temp_target_cool
+      - conditions:
+          - condition: numeric_state
+            entity_id: !input sensor_temperature
+            below: !input temp_target_heat
+        sequence:
+          - service: climate.set_hvac_mode
+            target:
+              entity_id: !input climate_device
+            data:
+              hvac_mode: "heat"
+          - service: climate.set_temperature
+            target:
+              entity_id: !input climate_device
+            data:
+              temperature: !input temp_target_heat
+    default:
+      - service: climate.set_hvac_mode
+        target:
+          entity_id: !input climate_device
+        data:
+          hvac_mode: "auto"
